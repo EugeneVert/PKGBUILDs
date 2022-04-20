@@ -1,0 +1,44 @@
+diff --git a/core/libs/database/item/scanner/itemscanner_photo.cpp b/core/libs/database/item/scanner/itemscanner_photo.cpp
+index 6bc4db41f4..7947d7d900 100644
+--- a/core/libs/database/item/scanner/itemscanner_photo.cpp
++++ b/core/libs/database/item/scanner/itemscanner_photo.cpp
+@@ -120,7 +120,8 @@ QString ItemScanner::detectImageFormat() const
+ 
+             if (
+                 (ext == QLatin1String("AVIF")) ||       // See bug #109060
+-                (ext == QLatin1String("JPX"))
++                (ext == QLatin1String("JPX"))  ||
++                (ext == QLatin1String("JXL"))
+                )
+             {
+                 return ext;
+
+diff --git a/core/libs/threadimageio/thumb/thumbnailcreator_engine.cpp b/core/libs/threadimageio/thumb/thumbnailcreator_engine.cpp
+index 548b895c53..87ae0b47f0 100644
+--- a/core/libs/threadimageio/thumb/thumbnailcreator_engine.cpp
++++ b/core/libs/threadimageio/thumb/thumbnailcreator_engine.cpp
+@@ -69,7 +69,8 @@ ThumbnailImage ThumbnailCreator::createThumbnail(const ThumbnailInfo& info, cons
+         if (
+             (info.mimeType == QLatin1String("image")) ||
+             (ext           == QLatin1String("AVIF"))  ||      // See bug #109060
+-            (ext           == QLatin1String("JPX"))
++            (ext           == QLatin1String("JPX"))   ||
++            (ext           == QLatin1String("JXL"))
+            )
+         {
+             if (qimage.isNull())
+
+diff --git a/core/libs/metadataengine/dmetadata/dmetadata_fileio.cpp b/core/libs/metadataengine/dmetadata/dmetadata_fileio.cpp
+index c633360de7..4febc0a7a5 100644
+--- a/core/libs/metadataengine/dmetadata/dmetadata_fileio.cpp
++++ b/core/libs/metadataengine/dmetadata/dmetadata_fileio.cpp
+@@ -56,7 +56,8 @@ bool DMetadata::load(const QString& filePath, Backend* backend)
+     if (
+         !mimeDB.mimeTypeForFile(filePath).name().startsWith(QLatin1String("video/")) &&
+         !mimeDB.mimeTypeForFile(filePath).name().startsWith(QLatin1String("audio/")) &&
+-        (QFileInfo(filePath).suffix().toUpper() != QLatin1String("INSV"))
++        (QFileInfo(filePath).suffix().toUpper() != QLatin1String("INSV")) &&
++        (QFileInfo(filePath).suffix().toUpper() != QLatin1String("JXL"))
+        )
+     {
+         // Process images only with Exiv2 backend first, or Exiftool in 2nd, or libraw for RAW files,

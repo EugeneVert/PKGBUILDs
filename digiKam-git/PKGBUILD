@@ -1,0 +1,63 @@
+# Contributor: Anthony Wang <ta180m at pm dot me>
+# Contributor: Chris Lane <aur at chrislane dot com>
+_pkgname=digikam
+pkgname=digikam-git
+pkgver=v7.5.0.r1529.gc6c205ac85
+pkgrel=1
+pkgdesc='An advanced digital photo management application'
+arch=('i686' 'x86_64')
+license=('GPL')
+url="https://www.digikam.org/"
+depends=(lensfun opencv knotifyconfig libksane kfilemetadata marble-common
+         threadweaver kcalendarcore qt5-xmlpatterns glu jasper)
+makedepends=(extra-cmake-modules doxygen eigen boost kdoctools git mold ccache ninja)
+optdepends=('hugin: panorama tool'
+            'qt5-imageformats: support for additional image formats (WEBP, TIFF)'
+            'rawtherapee: RAW import'
+            'darktable: RAW import'
+            'perl: for digitaglinktree')
+conflicts=('digikam')
+provides=('digikam')
+source=('git+https://invent.kde.org/graphics/digikam.git#branch=master'
+        'jxl.patch')
+sha256sums=('SKIP'
+            'bac7750d1641d3e4f2ccc052433df104df3bbc0844298eae70a1e5c0796bec3f')
+
+pkgver() {
+  cd ${_pkgname}
+  git describe --long | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd ${_pkgname}
+  patch --forward --strip=1 --input="${srcdir}/jxl.patch"
+}
+
+build() {
+  export CC='ccache gcc'
+  export CXX='ccache g++'
+  cmake \
+      -B build \
+      -S ${_pkgname} \
+      -DCMAKE_BUILD_TYPE=relwithdebinfo \
+      -DCMAKE_INSTALL_PREFIX=/usr \
+      -DCMAKE_INSTALL_LIBDIR=lib \
+      -DCMAKE_DISABLE_FIND_PACKAGE_ImageMagick=True \
+      -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=True \
+      -DBUILD_TESTING=OFF \
+      -DENABLE_QWEBENGINE=ON \
+      -DENABLE_KFILEMETADATASUPPORT=ON \
+      -DENABLE_MEDIAPLAYER=ON \
+      -DENABLE_AKONADICONTACTSUPPORT=OFF \
+      -DENABLE_MYSQLSUPPORT=ON \
+      -DENABLE_APPSTYLES=ON \
+      -Wno-dev \
+      -G Ninja
+  mold -run ninja -j 4 -C build
+}
+
+package() {
+  DESTDIR="${pkgdir}" ninja install -C build
+}
+
+# vim:set ts=2 sw=2 et:
