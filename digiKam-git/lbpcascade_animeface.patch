@@ -1,0 +1,247 @@
+diff --git a/core/libs/facesengine/detection/opencv-dnn/dnnfacedetectorbase.h b/core/libs/facesengine/detection/opencv-dnn/dnnfacedetectorbase.h
+index ad31680941..620b1e2daa 100644
+--- a/core/libs/facesengine/detection/opencv-dnn/dnnfacedetectorbase.h
++++ b/core/libs/facesengine/detection/opencv-dnn/dnnfacedetectorbase.h
+@@ -81,6 +81,7 @@ protected:
+     cv::Size     inputImageSize;
+ 
+     cv::dnn::Net net;
++    cv::CascadeClassifier cascade;
+ 
+     QMutex       mutex;
+ 
+diff --git a/core/libs/facesengine/detection/opencv-dnn/dnnfacedetectorssd.cpp b/core/libs/facesengine/detection/opencv-dnn/dnnfacedetectorssd.cpp
+index e178ea435a..d56ebf6bab 100644
+--- a/core/libs/facesengine/detection/opencv-dnn/dnnfacedetectorssd.cpp
++++ b/core/libs/facesengine/detection/opencv-dnn/dnnfacedetectorssd.cpp
+@@ -56,29 +56,37 @@ bool DNNFaceDetectorSSD::loadModels()
+     QUrl    appUrl  = QUrl::fromLocalFile(appPath).adjusted(QUrl::RemoveFilename);
+     appUrl.setPath(appUrl.path() + QLatin1String("digikam/facesengine/"));
+ 
+-    QString model   = QLatin1String("deploy.prototxt");
+-    QString data    = QLatin1String("res10_300x300_ssd_iter_140000_fp16.caffemodel");
++//    QString model   = QLatin1String("deploy.prototxt");
++//    QString data    = QLatin1String("res10_300x300_ssd_iter_140000_fp16.caffemodel");
++    QString cascadef = QLatin1String("lbpcascade_animeface.xml");
+ 
+-    QString nnmodel = appUrl.toLocalFile() + model;
+-    QString nndata  = appUrl.toLocalFile() + data;
++//    QString nnmodel = appUrl.toLocalFile() + model;
++//    QString nndata  = appUrl.toLocalFile() + data;
++    QString nncascade  = appUrl.toLocalFile() + cascadef;
+ 
+-    if (!nnmodel.isEmpty() && !nndata.isEmpty())
++    if (/* !nnmodel.isEmpty() && !nndata.isEmpty() && */ !nncascade.isEmpty())
+     {
+         try
+         {
+-            qCDebug(DIGIKAM_FACEDB_LOG) << "SSD model:" << nnmodel << ", SSD data:" << nndata;
++//            qCDebug(DIGIKAM_FACEDB_LOG) << "SSD model:" << nnmodel << ", SSD data:" << nndata;
+ 
+-#ifdef Q_OS_WIN
++//#ifdef Q_OS_WIN
+ 
+-            net = cv::dnn::readNetFromCaffe(nnmodel.toLocal8Bit().constData(),
+-                                            nndata.toLocal8Bit().constData());
++//            net = cv::dnn::readNetFromCaffe(nnmodel.toLocal8Bit().constData(),
++//                                            nndata.toLocal8Bit().constData());
+ 
+-#else
++//#else
+ 
+-            net = cv::dnn::readNetFromCaffe(nnmodel.toStdString(),
+-                                            nndata.toStdString());
++//            net = cv::dnn::readNetFromCaffe(nnmodel.toStdString(),
++//                                            nndata.toStdString());
+ 
+-#endif
++//#endif
++            qDebug(DIGIKAM_FACEDB_LOG) << "xml path:" << nncascade;
++            if(!cascade.load(nncascade.toStdString()))
++            {
++                qDebug() << "--(!)Error loading face cascade\n";
++                return false;
++            };
+ 
+         }
+         catch (cv::Exception& e)
+@@ -96,7 +104,7 @@ bool DNNFaceDetectorSSD::loadModels()
+     }
+     else
+     {
+-        qCCritical(DIGIKAM_FACEDB_LOG) << "Cannot found faces engine DNN model" << model << "or" << data;
++//        qCCritical(DIGIKAM_FACEDB_LOG) << "Cannot found faces engine DNN model" << model << "or" << data;
+         qCCritical(DIGIKAM_FACEDB_LOG) << "Faces detection feature cannot be used!";
+ 
+         return false;
+@@ -115,86 +123,100 @@ void DNNFaceDetectorSSD::detectFaces(const cv::Mat& inputImage,
+         return;
+     }
+ 
++    scaleFactor = 1.1;
++
+     cv::Mat detection;
+-    cv::Mat inputBlob = cv::dnn::blobFromImage(inputImage, scaleFactor, inputImageSize, meanValToSubtract, true, false);
++//    cv::Mat inputBlob = cv::dnn::blobFromImage(inputImage, scaleFactor, inputImageSize, meanValToSubtract, true, false);
++    cv::Mat gray, grayeq;
++
+ 
+     mutex.lock();
+     {
+-        net.setInput(inputBlob);
+-        detection = net.forward();
+-    }
+-    mutex.unlock();
++    cv::cvtColor(inputImage, gray, cv::COLOR_RGB2GRAY);
++    cv::equalizeHist(gray, grayeq);
++    qCDebug(DIGIKAM_FACESENGINE_LOG) << "Starting detection";
++    cascade.detectMultiScale(grayeq, detectedBboxes, 1.1, 2, 0, cv::Size(24, 24));
++    qCDebug(DIGIKAM_FACESENGINE_LOG) << "Detection done";
+ 
+-    postprocess(detection, paddedSize, detectedBboxes);
+-}
+ 
+-void DNNFaceDetectorSSD::postprocess(cv::Mat detection,
+-                                     const cv::Size& paddedSize,
+-                                     std::vector<cv::Rect>& detectedBboxes) const
+-{
+-    std::vector<float> goodConfidences, doubtConfidences, confidences;
+-    std::vector<cv::Rect> goodBoxes, doubtBoxes, boxes;
+-
+-    cv::Mat detectionMat(detection.size[2], detection.size[3], CV_32F, detection.ptr<float>());
+-
+-    // TODO: model problem, confidence of ssd output too low ===> false detection
+-
+-    for (int i = 0 ; i < detectionMat.rows ; ++i)
+-    {
+-        float confidence = detectionMat.at<float>(i, 2);
+-
+-        if (confidence > confidenceThreshold)
+-        {
+-            float leftRatio   = detectionMat.at<float>(i, 3);
+-            float topRatio    = detectionMat.at<float>(i, 4);
+-            float rightRatio  = detectionMat.at<float>(i, 5);
+-            float bottomRatio = detectionMat.at<float>(i, 6);
+-
+-            int left          = (int)(leftRatio   * inputImageSize.width);
+-            int right         = (int)(rightRatio  * inputImageSize.width);
+-            int top           = (int)(topRatio    * inputImageSize.height);
+-            int bottom        = (int)(bottomRatio * inputImageSize.height);
+-
+-            selectBbox(paddedSize,
+-                       confidence,
+-                       left,
+-                       right,
+-                       top,
+-                       bottom,
+-                       goodConfidences,
+-                       goodBoxes,
+-                       doubtConfidences,
+-                       doubtBoxes);
+-        }
+-    }
+-/*
+-    qCDebug(DIGIKAM_FACESENGINE_LOG) << "nb of doubtbox = " << doubtBoxes.size();
+-    qCDebug(DIGIKAM_FACESENGINE_LOG) << "nb of goodbox = " << goodBoxes.size();
+-*/
+-    if (goodBoxes.empty())
+-    {
+-        boxes       = doubtBoxes;
+-        confidences = doubtConfidences;
+-    }
+-    else
+-    {
+-        boxes       = goodBoxes;
+-        confidences = goodConfidences;
++//        net.setInput(inputBlob);
++//        detection = net.forward();
+     }
++    mutex.unlock();
+ 
+-    // Perform non maximum suppression to eliminate redundant overlapping boxes with lower confidences
+-
+-    std::vector<int> indices;
+-    cv::dnn::NMSBoxes(boxes, confidences, confidenceThreshold, nmsThreshold, indices);
+-
+-    // Get detected bounding boxes
+-
+-    for (size_t i = 0 ; i < indices.size() ; ++i)
++    for (std::size_t i = 0; i < detectedBboxes.size(); ++i)
+     {
+-        cv::Rect bbox = boxes[indices[i]];
+-        correctBbox(bbox, paddedSize);
+-        detectedBboxes.push_back(cv::Rect(bbox.x, bbox.y, bbox.width, bbox.height));
++        correctBbox(detectedBboxes[i], paddedSize);
+     }
++
++//    postprocess(detection, paddedSize, detectedBboxes);
+ }
+ 
++//void DNNFaceDetectorSSD::postprocess(cv::Mat detection,
++//                                     const cv::Size& paddedSize,
++//                                     std::vector<cv::Rect>& detectedBboxes) const
++//{
++//    std::vector<float> goodConfidences, doubtConfidences, confidences;
++//    std::vector<cv::Rect> goodBoxes, doubtBoxes, boxes;
++
++//    cv::Mat detectionMat(detection.size[2], detection.size[3], CV_32F, detection.ptr<float>());
++
++//    // TODO: model problem, confidence of ssd output too low ===> false detection
++
++//    for (int i = 0 ; i < detectionMat.rows ; ++i)
++//    {
++//        float confidence = detectionMat.at<float>(i, 2);
++
++//        if (confidence > confidenceThreshold)
++//        {
++//            float leftRatio   = detectionMat.at<float>(i, 3);
++//            float topRatio    = detectionMat.at<float>(i, 4);
++//            float rightRatio  = detectionMat.at<float>(i, 5);
++//            float bottomRatio = detectionMat.at<float>(i, 6);
++
++//            int left          = (int)(leftRatio   * inputImageSize.width);
++//            int right         = (int)(rightRatio  * inputImageSize.width);
++//            int top           = (int)(topRatio    * inputImageSize.height);
++//            int bottom        = (int)(bottomRatio * inputImageSize.height);
++
++//            selectBbox(paddedSize,
++//                       confidence,
++//                       left,
++//                       right,
++//                       top,
++//                       bottom,
++//                       goodConfidences,
++//                       goodBoxes,
++//                       doubtConfidences,
++//                       doubtBoxes);
++//        }
++//    }
++///*
++//    qCDebug(DIGIKAM_FACESENGINE_LOG) << "nb of doubtbox = " << doubtBoxes.size();
++//    qCDebug(DIGIKAM_FACESENGINE_LOG) << "nb of goodbox = " << goodBoxes.size();
++//*/
++//    if (goodBoxes.empty())
++//    {
++//        boxes       = doubtBoxes;
++//        confidences = doubtConfidences;
++//    }
++//    else
++//    {
++//        boxes       = goodBoxes;
++//        confidences = goodConfidences;
++//    }
++
++//    // Perform non maximum suppression to eliminate redundant overlapping boxes with lower confidences
++
++//    std::vector<int> indices;
++//    cv::dnn::NMSBoxes(boxes, confidences, confidenceThreshold, nmsThreshold, indices);
++
++//    // Get detected bounding boxes
++
++//    for (size_t i = 0 ; i < indices.size() ; ++i)
++//    {
++//        detectedBboxes.push_back(cv::Rect(bbox.x, bbox.y, bbox.width, bbox.height));
++//    }
++//}
++
+ } // namespace Digikam

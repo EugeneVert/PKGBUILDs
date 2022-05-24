@@ -2,7 +2,7 @@
 # Contributor: Chris Lane <aur at chrislane dot com>
 _pkgname=digikam
 pkgname=digikam-git
-pkgver=v7.5.0.r1529.gc6c205ac85
+pkgver=v7.5.0.r2192.gfc2f44b459
 pkgrel=1
 pkgdesc='An advanced digital photo management application'
 arch=('i686' 'x86_64')
@@ -18,19 +18,21 @@ optdepends=('hugin: panorama tool'
             'perl: for digitaglinktree')
 conflicts=('digikam')
 provides=('digikam')
+# source=('git+https://invent.kde.org/graphics/digikam.git#branch=qt5-maintenance'
 source=('git+https://invent.kde.org/graphics/digikam.git#branch=master'
-        'jxl.patch')
+        'lbpcascade_animeface.patch')
 sha256sums=('SKIP'
-            'bac7750d1641d3e4f2ccc052433df104df3bbc0844298eae70a1e5c0796bec3f')
-
+            'SKIP')
+#             'SKIP')
 pkgver() {
   cd ${_pkgname}
   git describe --long | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
 }
 
 prepare() {
+
   cd ${_pkgname}
-  patch --forward --strip=1 --input="${srcdir}/jxl.patch"
+  patch --forward --strip=1 --input="${srcdir}/lbpcascade_animeface.patch"
 }
 
 build() {
@@ -53,6 +55,8 @@ build() {
       -DENABLE_APPSTYLES=ON \
       -Wno-dev \
       -G Ninja
+#       -DCMAKE_PREFIX_PATH="/usr/lib/ffmpeg4.4;/usr/include/ffmpeg4.4" \
+#       -DBUILD_WITH_QT6=ON \
   mold -run ninja -j 4 -C build
 }
 
